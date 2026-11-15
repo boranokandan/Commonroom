@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#f8f7f3" />
+  <title>Commonroom — find your study people</title>
+  <meta name="description" content="A high school study partner demo for every subject." />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <a class="brand" href="#" aria-label="Commonroom home"><span class="brand-mark">✳</span><span>commonroom<span class="brand-dot">.</span></span></a>
+      <div class="side-label">YOUR SPACE</div>
+      <nav class="main-nav" aria-label="Main navigation">
+        <button class="nav-item active" data-view="discover"><span>⌕</span> Discover</button>
+        <button class="nav-item" data-view="sessions"><span>▦</span> My sessions <span id="sessionCount" class="count">0</span></button>
+        <button class="nav-item" data-view="room"><span>▢</span> Study room</button>
+      </nav>
+      <div class="side-bottom"><div class="tip"><span class="tip-icon">✦</span><strong>Better together.</strong><p>A little help can make a big difference. Find your people, then figure it out together.</p></div><div class="profile"><div class="avatar me">A</div><div><strong>Alex Morgan</strong><small>Student account · Demo</small></div><span class="profile-more">···</span></div></div>
+    </aside>
+    <main class="main">
+      <header class="topbar"><div class="crumb">Your space <span>/</span> <strong id="pageCrumb">Discover</strong></div><div class="top-actions"><span class="school-pill">⌂ &nbsp; Northview High</span><button class="icon-btn" id="helpBtn" title="How this demo works" aria-label="How this demo works">?</button></div></header>
+      <section id="discoverView" class="view">
+        <div class="hero"><div class="hero-copy"><span class="eyebrow">STUDY BETTER, TOGETHER</span><h1>Good questions deserve<br><em>good company.</em></h1><p>Find classmates working on the same thing. Join a session, ask what’s confusing, and make progress together.</p><button class="primary-btn" id="findSessionBtn">Find a study session <span>↗</span></button></div><div class="hero-art" aria-hidden="true"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="art-card card-one"><span class="mini-icon orange">∑</span><span>Math homework<br><small>3 people studying</small></span></div><div class="art-card card-two"><span class="mini-icon lilac">✳</span><span>We got this!<br><small>See you at 4:30</small></span></div><div class="art-avatar avatar-one">M</div><div class="art-avatar avatar-two">J</div><div class="art-spark">✦</div></div></div>
+        <div class="content-head"><div><span class="eyebrow muted">EXPLORE</span><h2>What are you working on?</h2><p>Pick a subject to find students on your wavelength.</p></div><button class="outline-btn" id="createSessionBtn">＋ Create a session</button></div>
+        <div class="subjects" id="subjects"></div>
+        <div class="section-row"><div><h2>Sessions happening soon</h2><p>Jump in when you’re ready. Everyone starts somewhere.</p></div><span class="live-dot"><i></i> Open sessions</span></div>
+        <div class="filters"><label class="search-wrap"><span>⌕</span><input id="searchInput" placeholder="Search a topic or subject" aria-label="Search sessions" /></label><select id="subjectFilter" aria-label="Filter by subject"><option value="all">All subjects</option></select><select id="timeFilter" aria-label="Filter by time"><option value="all">Any time</option><option value="now">Happening now</option><option value="later">Starting later</option></select></div>
+        <div id="sessionCards" class="session-grid"></div>
+      </section>
+      <section id="sessionsView" class="view hidden"><div class="page-heading"><span class="eyebrow muted">YOUR CALENDAR</span><h1>My sessions</h1><p>The study sessions you’ve joined or created.</p></div><div id="mySessions" class="session-grid"></div></section>
+      <section id="roomView" class="view hidden"><div class="room-heading"><div><span class="eyebrow muted">STUDY ROOM · DEMO</span><h1 id="roomTitle">Algebra, together.</h1><p id="roomSubtitle">Work through questions with classmates, one step at a time.</p></div><button class="outline-btn" id="leaveRoomBtn">← Leave room</button></div><div class="room-layout"><div class="room-main"><div class="video-grid"><div class="video-tile local-video"><video id="localVideo" autoplay muted playsinline></video><div class="video-placeholder" id="videoPlaceholder"><div class="avatar large me">A</div><span>Camera is off</span></div><span class="video-name">You · Alex</span></div><div class="video-tile peer-video"><div class="avatar large purple">M</div><span class="video-name">Maya · Demo participant</span></div></div><div class="call-controls"><button id="cameraBtn" aria-pressed="false">▣ <span>Camera off</span></button><button id="micBtn" aria-pressed="false">♩ <span>Mic off</span></button><button id="notesBtn">▤ <span>Notes</span></button><button class="leave-call" id="endBtn">↩ <span>Leave</span></button></div><div class="workspace"><div class="workspace-title"><div><span class="mini-icon orange">✎</span><strong>Shared study notes</strong></div><span>Saved on this device</span></div><textarea id="notesArea" placeholder="Write a question, a useful explanation, or the next step to try…" aria-label="Study notes"></textarea></div></div><aside class="room-side"><div class="room-side-card"><span class="eyebrow muted">TODAY’S FOCUS</span><h3 id="focusTitle">Quadratic equations</h3><p>Start with one question. Take turns explaining your thinking.</p><div class="focus-steps"><span>1</span> Say what you’re stuck on<br><span>2</span> Work through it together<br><span>3</span> Write down what clicked</div></div><div class="room-side-card warm"><span class="eyebrow muted">A LITTLE REMINDER</span><p>“I don’t get it yet” is a great place to start.</p><div class="doodle">✳</div></div></aside></div></section>
+    </main>
+  </div>
+  <dialog id="createDialog" class="modal"><form method="dialog" id="createForm"><button class="modal-close" type="button" data-close aria-label="Close">×</button><span class="eyebrow muted">BRING PEOPLE TOGETHER</span><h2>Create a study session</h2><p>Choose a subject and a clear topic so classmates know what you’ll work on.</p><label>Subject<select id="newSubject" required></select></label><label>What are you studying?<input id="newTopic" required maxlength="60" placeholder="e.g. Balancing chemical equations" /></label><label>When?<select id="newTime"><option value="now">Start now</option><option value="later">Later today</option></select></label><div class="modal-actions"><button class="outline-btn" type="button" data-close>Cancel</button><button class="primary-btn" type="submit">Create session ↗</button></div></form></dialog>
+  <dialog id="helpDialog" class="modal"><div class="help-content"><button class="modal-close" type="button" data-close aria-label="Close">×</button><span class="eyebrow muted">ABOUT THIS DEMO</span><h2>A first look at Commonroom</h2><p>Explore subjects, search sessions, create one, and open a sample study room. Your sessions and notes stay in this browser.</p><p>The other student is a demo character. Live video between students, accounts, school verification, and moderation are future work.</p><button class="primary-btn" type="button" data-close>Got it</button></div></dialog>
+  <script src="app.js"></script>
+</body>
+</html>
