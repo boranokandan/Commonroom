@@ -18,7 +18,7 @@ The SQLite database is created as `commonroom.sqlite3` beside `server.py` and is
 
 - The host can complete a session only when at least two distinct students have joined.
 - Completing a session awards **1 token** to each participant, once.
-- After completion, each participant may thank one other participant for helping. The recipient earns **3 tokens**.
+- After completion, each participant may thank one other participant for helping and add an optional note of up to 240 characters. The recipient earns **3 tokens**. Several classmates may thank the same helper. Notes appear only in the recipient’s private impact history.
 - Tokens have no cash value or spending feature.
 
 ## Current limits
