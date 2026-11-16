@@ -46,6 +46,15 @@ class Store:
             CREATE TABLE IF NOT EXISTS token_events (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), session_id INTEGER NOT NULL REFERENCES study_sessions(id), kind TEXT NOT NULL, amount INTEGER NOT NULL, created_at INTEGER NOT NULL, UNIQUE(user_id,session_id,kind));
             CREATE TABLE IF NOT EXISTS thanks (session_id INTEGER NOT NULL REFERENCES study_sessions(id), from_user INTEGER NOT NULL REFERENCES users(id), to_user INTEGER NOT NULL REFERENCES users(id), created_at INTEGER NOT NULL, PRIMARY KEY(session_id,from_user));
             """)
+            # Existing MVP databases gain note fields without losing token history.
+            event_columns = {r[1] for r in db.execute("PRAGMA table_info(token_events)")}
+            if "note" not in event_columns:
+                db.execute("ALTER TABLE token_events ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+            if "actor_id" not in event_columns:
+                db.execute("ALTER TABLE token_events ADD COLUMN actor_id INTEGER REFERENCES users(id)")
+            thanks_columns = {r[1] for r in db.execute("PRAGMA table_info(thanks)")}
+            if "note" not in thanks_columns:
+                db.execute("ALTER TABLE thanks ADD COLUMN note TEXT NOT NULL DEFAULT ''")
 
     @staticmethod
     def hash_password(password, salt):
@@ -94,7 +103,7 @@ class Store:
 
     def ledger(self, user_id):
         with self.db() as db:
-            rows = db.execute("SELECT e.amount,e.kind,e.created_at,s.topic,s.subject FROM token_events e JOIN study_sessions s ON s.id=e.session_id WHERE e.user_id=? ORDER BY e.id DESC LIMIT 50", (user_id,)).fetchall()
+            rows = db.execute("SELECT e.amount,e.kind,e.note,e.created_at,s.topic,s.subject,u.name actor_name FROM token_events e JOIN study_sessions s ON s.id=e.session_id LEFT JOIN users u ON u.id=e.actor_id WHERE e.user_id=? ORDER BY e.id DESC LIMIT 50", (user_id,)).fetchall()
         return [dict(r) for r in rows]
 
     def sessions(self, user_id):
@@ -143,8 +152,11 @@ class Store:
             rows=db.execute("SELECT u.id,u.name FROM members m JOIN users u ON u.id=m.user_id WHERE m.session_id=? ORDER BY m.joined_at",(session_id,)).fetchall()
         return [dict(r) for r in rows]
 
-    def thank(self, user_id, session_id, recipient_id):
+    def thank(self, user_id, session_id, recipient_id, note=""):
         if user_id == recipient_id: raise AppError(400,"You cannot thank yourself.")
+        if not isinstance(note, str) or len(note.strip()) > 240:
+            raise AppError(400,"Your note must be 240 characters or fewer.")
+        note = note.strip()
         with self.db() as db:
             s=db.execute("SELECT status FROM study_sessions WHERE id=?",(session_id,)).fetchone()
             if not s: raise AppError(404,"Session not found.")
@@ -153,10 +165,10 @@ class Store:
             if len(members)!=2: raise AppError(403,"Both students must have joined this session.")
             now=int(time.time())
             try:
-                db.execute("INSERT INTO thanks VALUES(?,?,?,?)",(session_id,user_id,recipient_id,now))
+                db.execute("INSERT INTO thanks(session_id,from_user,to_user,created_at,note) VALUES(?,?,?,?,?)",(session_id,user_id,recipient_id,now,note))
             except sqlite3.IntegrityError:
                 raise AppError(409,"You have already thanked someone in this session.")
-            db.execute("INSERT INTO token_events(user_id,session_id,kind,amount,created_at) VALUES(?,?,?,?,?)",(recipient_id,session_id,'helped',3,now))
+            db.execute("INSERT INTO token_events(user_id,session_id,kind,amount,created_at,note,actor_id) VALUES(?,?,?,?,?,?,?)",(recipient_id,session_id,f'helped:{user_id}',3,now,note,user_id))
 
 class Handler(BaseHTTPRequestHandler):
     store = None
@@ -211,7 +223,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     try: recipient=int(data.get('recipient_id'))
                     except (TypeError,ValueError): raise AppError(400,"Choose a helper.")
-                    self.store.thank(user['id'],sid,recipient)
+                    self.store.thank(user['id'],sid,recipient,data.get('note',''))
                 return self.send_json({'ok':True})
             raise AppError(404,"Not found.")
         if path=='/api/me':
