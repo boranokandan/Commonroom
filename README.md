@@ -1,7 +1,7 @@
 # Commonroom
 
-Commonroom is a high school study partner concept. Students can find classmates by subject and topic, join or create a session, and work together in a study room.
+Commonroom is a high school study partner concept. This repository contains an interactive MVP prototype in [`demo/`](demo/).
 
-## Demo
+The demo lets a student browse subjects and sessions, search, create a session, see sample partner matches by topic and study style, enter a sample study room, preview their own camera, and save notes on their device. Open `demo/index.html` in a browser to try it.
 
-The current browser-based prototype is in [`demo/`](demo/). Open `demo/index.html` to explore it. The demo saves sessions and notes in the browser; live student-to-student calls and school accounts are future work.
+The prototype runs entirely in one browser. Matches are fictional, sessions and notes are stored locally, and students cannot yet connect to each other. Real accounts, live calls, shared notes, school verification, and moderation are future work.
