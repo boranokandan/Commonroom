@@ -37,4 +37,27 @@ class FlowTests(unittest.TestCase):
         self.assertEqual(self.store.balance(self.b['id']),4)
         self.assertEqual([e['amount'] for e in self.store.ledger(self.b['id'])],[3,1])
 
+    def test_private_notes_and_multiple_thanks_to_one_helper(self):
+        sid=self.store.create_session(self.a['id'],'Science','Cell structure')
+        self.store.join(self.b['id'],sid)
+        self.store.join(self.c['id'],sid)
+        self.store.complete(self.a['id'],sid)
+        self.store.thank(self.a['id'],sid,self.b['id'],'You explained the diagram clearly.')
+        self.store.thank(self.c['id'],sid,self.b['id'],'Thanks for the example!')
+        self.assertEqual(self.store.balance(self.b['id']),7)
+        events=self.store.ledger(self.b['id'])
+        self.assertEqual([e['note'] for e in events[:2]],['Thanks for the example!','You explained the diagram clearly.'])
+        self.assertEqual([e['actor_name'] for e in events[:2]],['Jo','Alex'])
+        self.assertFalse(any(e['note'] for e in self.store.ledger(self.a['id'])))
+        with self.assertRaises(AppError):
+            self.store.thank(self.b['id'],sid,self.a['id'],'x'*241)
+
+    def test_reopening_database_keeps_history(self):
+        sid=self.store.create_session(self.a['id'],'English','Essay review')
+        self.store.join(self.b['id'],sid)
+        self.store.complete(self.a['id'],sid)
+        Store(self.store.path)
+        self.assertEqual(self.store.balance(self.a['id']),1)
+        self.assertEqual(self.store.ledger(self.a['id'])[0]['note'],'')
+
 if __name__=='__main__': unittest.main()
