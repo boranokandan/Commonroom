@@ -4,13 +4,13 @@ This is a small, dependency-free web app using Python's standard library and SQL
 
 ## Run
 
-From this folder:
+On a Mac, double-click `Start Commonroom.command` in the repository root and keep its Terminal window open. Or, from this folder:
 
 ```sh
 python3 server.py
 ```
 
-Then open `http://127.0.0.1:8000`. The default server listens only on your computer. For use across devices, deploy behind HTTPS with proper hosting and security controls; do not expose this development server directly to the internet.
+Then open `http://127.0.0.1:8000`. The link works only while the server is running on that same computer. The default server listens only on your computer. For use across devices, deploy behind HTTPS with proper hosting and security controls; do not expose this development server directly to the internet.
 
 The SQLite database is created as `commonroom.sqlite3` beside `server.py` and is ignored by Git. Back it up if you want to keep accounts and sessions.
 
