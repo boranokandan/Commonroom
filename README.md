@@ -2,6 +2,7 @@
 
 Commonroom helps high school students find study partners and recognize classmates who help others learn.
 
+- [`hosted/`](hosted/) contains the deployed app’s Worker backend, database migration, and web interface.
 - [`app/`](app/) is a working Python and SQLite MVP with accounts, shared study sessions, and Help Tokens. On a Mac, double-click [`Start Commonroom.command`](Start%20Commonroom.command) to run it; keep the Terminal window open. See the app README for manual steps.
 - [`demo/`](demo/) is the original browser-only design prototype.
 - [`admin/`](admin/) is a visual admin dashboard prototype with fictional data.
