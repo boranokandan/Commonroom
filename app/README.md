@@ -10,7 +10,7 @@ From this folder:
 python3 server.py
 ```
 
-Then open `http://127.0.0.1:8000`. To let classmates on the same trusted local network use the same server, run with `--host 0.0.0.0` and share the computer's local IP and port. Do not expose this development server to the public internet.
+Then open `http://127.0.0.1:8000`. The default server listens only on your computer. For use across devices, deploy behind HTTPS with proper hosting and security controls; do not expose this development server directly to the internet.
 
 The SQLite database is created as `commonroom.sqlite3` beside `server.py` and is ignored by Git. Back it up if you want to keep accounts and sessions.
 
