@@ -1,6 +1,6 @@
 # Commonroom demo
 
-A browser-based high school study partner concept. Students can explore subjects, find or create sessions, enter a sample study room, preview their own camera, and save study notes locally.
+A browser-based high school study partner concept. Students can explore subjects, find fictional partner matches by topic and study style, create sessions, enter a sample study room, preview their own camera, and save study notes locally.
 
 ## Run
 
