@@ -17,7 +17,7 @@
     </form>
     <div>
       <div class="board-heading"><h2>Recent questions</h2><button class="outline" type="button" id="refreshQuestions">Refresh</button></div>
-      <label for="questionSubjectFilter">Filter by subject</label><select id="questionSubjectFilter"><option value="">All subjects</option></select><div id="questionFeed" class="question-feed"></div>
+      <div class="question-filters"><div><label for="questionCurriculumFilter">Curriculum</label><select id="questionCurriculumFilter"><option value="">Choose a curriculum</option></select></div><div><label for="questionSubjectFilter">Subject</label><select id="questionSubjectFilter" disabled><option value="">Choose a curriculum first</option></select></div></div><div id="questionFeed" class="question-feed"></div>
       <p class="board-status" id="feedStatus" role="status"></p>
       <button class="outline hidden" type="button" id="olderQuestions">Load older questions</button>
     </div>
