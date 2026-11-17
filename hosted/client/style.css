@@ -88,3 +88,9 @@ body[data-theme=sunrise] .hero h1 em { color:#9e6040; }
 .question-filters #questionSubjectFilter { margin:0; }
 .question-filters select:disabled { color:#7d8c80; background:#f3f5f0; }
 @media(max-width:650px) { .question-filters { grid-template-columns:1fr; } }
+
+.subject-search-row { display:flex; gap:8px; margin-bottom:12px; }
+.subject-search-row input { width:100%; min-width:0; border:1px solid #ccd9cd; border-radius:8px; background:white; padding:10px; font:inherit; font-size:12px; }
+.subject-search-row input:disabled { background:#f3f5f0; }
+.subject-search-row button { flex:none; }
+.subject-search-row button:disabled { opacity:.55; cursor:default; }
