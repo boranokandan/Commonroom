@@ -17,7 +17,7 @@
     </form>
     <div>
       <div class="board-heading"><h2>Recent questions</h2><button class="outline" type="button" id="refreshQuestions">Refresh</button></div>
-      <div class="question-filters"><div><label for="questionCurriculumFilter">Curriculum</label><select id="questionCurriculumFilter"><option value="">Choose a curriculum</option></select></div><div><label for="questionSubjectFilter">Subject</label><select id="questionSubjectFilter" disabled><option value="">Choose a curriculum first</option></select></div></div><div id="questionFeed" class="question-feed"></div>
+      <div class="question-filters"><div><label for="questionCurriculumFilter">Curriculum</label><select id="questionCurriculumFilter"><option value="">Choose a curriculum</option></select></div><div><label for="questionFilterSearch">Search subjects</label><div class="subject-search-row"><input type="search" id="questionFilterSearch" placeholder="Name or code, e.g. 9231" disabled aria-controls="questionSubjectFilter" aria-describedby="questionFilterSearchStatus"><button class="outline" type="button" id="questionFilterSearchButton" disabled>Search</button></div><label for="questionSubjectFilter" class="subject-result-label">Subject</label><select id="questionSubjectFilter" disabled><option value="">Choose a curriculum first</option></select><p id="questionFilterSearchStatus" class="account-hint" role="status"></p></div></div><div id="questionFeed" class="question-feed"></div>
       <p class="board-status" id="feedStatus" role="status"></p>
       <button class="outline hidden" type="button" id="olderQuestions">Load older questions</button>
     </div>
