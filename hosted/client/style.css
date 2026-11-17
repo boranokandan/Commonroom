@@ -70,3 +70,5 @@ body[data-theme=sunrise] .hero h1 em { color:#9e6040; }
 .subject-sources a { font-size:11px; color:#3f704b; }
 .subject-fieldset > input[type=search] { width:100%; border:1px solid #ccd9cd; padding:10px; border-radius:8px; font:inherit; font-size:13px; }
 .subject-fieldset > label { display:block; font-size:12px; margin:0 0 5px; }
+
+.more-subjects { margin-top:12px; }
