@@ -114,3 +114,31 @@ test('reward selections preserve token history and remain private', async () => 
     assert.equal((await request('/me')).user.balance, 5);
   } finally {database.close();}
 });
+
+test('coded subjects keep qualification, level, and leading zeros through account and session storage', async () => {
+  const {database, request} = setup();
+  try {
+    const {curricula} = await request('/curricula', {user: null});
+    for (const curriculum of curricula) {
+      assert.equal(new Set(curriculum.subjects).size, curriculum.subjects.length);
+      for (const value of curriculum.subjects) assert.ok(value.length <= 60, value);
+    }
+    const cambridge = curricula.find(item => item.id === 'cambridge');
+    const further = cambridge.courses.find(course => course.code === '9231');
+    const igcseMath = cambridge.courses.find(course => course.code === '0580');
+    assert.equal(further.name, 'Further Mathematics');
+    assert.equal(igcseMath.qualification, 'IGCSE');
+    await request('/profile', {data: {...account, curriculum: 'cambridge', subjects: [further.value, igcseMath.value]}});
+    assert.deepEqual((await request('/me')).user.academics.subjects, [further.value, igcseMath.value]);
+    await request('/sessions', {data: {subject: further.value, topic: 'Complex numbers'}, status: 201});
+    assert.equal((await request('/sessions')).sessions[0].subject, further.value);
+    const apHistory = curricula.find(item => item.id === 'us').courses.find(course => course.code === '07');
+    assert.equal(apHistory.code, '07');
+    const ib = curricula.find(item => item.id === 'ib-dp');
+    const ibMath = ib.courses.filter(course => course.code === '166711');
+    assert.deepEqual(ibMath.map(course => course.qualification), ['SL', 'HL']);
+    assert.notEqual(ibMath[0].value, ibMath[1].value);
+    await request('/account', {data: {curriculum: 'ib-dp', subjects: [ibMath[1].value, 'Biology', 'My school course']}});
+    assert.deepEqual((await request('/me')).user.academics.subjects, [ibMath[1].value, 'Biology', 'My school course']);
+  } finally {database.close();}
+});
