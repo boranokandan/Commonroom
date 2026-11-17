@@ -1,3 +1,6 @@
+const subjectChoiceLimit = 4;
+const expandedSubjectChoices = {auth: false, account: false};
+
 function curriculumSubjects(id) {
   return curricula.find(curriculum => curriculum.id === id)?.subjects ?? [];
 }
@@ -40,6 +43,7 @@ function setupAcademicForm(prefix, settings) {
   select.innerHTML = '<option value="">Choose a curriculum</option>' +
     curricula.map(curriculum => `<option value="${safe(curriculum.id)}">${safe(curriculum.name)}</option>`).join('');
   select.value = settings?.curriculum ?? '';
+  expandedSubjectChoices[prefix] = false;
   $('#' + prefix + 'SubjectSearch').value = '';
   renderSubjectChoices(prefix, settings?.subjects ?? []);
   $('#' + prefix + 'CustomSubject').value = '';
@@ -74,22 +78,35 @@ function updateMySubjects() {
 
 function filterSubjectChoices(prefix) {
   const query = $('#' + prefix + 'SubjectSearch').value.trim().toLocaleLowerCase();
-  let shown = 0;
-  for (const label of $('#' + prefix + 'Subjects').querySelectorAll('.subject-choice')) {
-    const matches = label.dataset.search.includes(query);
-    label.classList.toggle('hidden', !matches);
-    if (matches) shown++;
-  }
-  $('#' + prefix + 'SearchStatus').textContent = query
-    ? (shown ? shown + ' matching subjects' : 'No match. Add your subject below.')
+  const choices = Array.from($('#' + prefix + 'Subjects').querySelectorAll('.subject-choice'));
+  const matches = choices.filter(label => label.dataset.search.includes(query));
+  // Search covers the full catalogue, including choices hidden in the short list.
+  const expanded = expandedSubjectChoices[prefix];
+  const visible = new Set(query || expanded ? matches : matches.slice(0, subjectChoiceLimit));
+  for (const label of choices) label.classList.toggle('hidden', !visible.has(label));
+  const more = $('#' + prefix + 'MoreSubjects');
+  more.classList.toggle('hidden', Boolean(query) || choices.length <= subjectChoiceLimit);
+  more.setAttribute('aria-expanded', String(expanded));
+  more.textContent = expanded ? 'Fewer options' : 'More options';
+  const selectedCount = choices.filter(label => label.querySelector('input').checked).length;
+  const selection = selectedCount ? selectedCount + ' selected' : '';
+  const searchStatus = query
+    ? (matches.length ? matches.length + (matches.length === 1 ? ' matching subject' : ' matching subjects') : 'No match. Add your subject below.')
     : '';
+  $('#' + prefix + 'SearchStatus').textContent = [searchStatus, selection].filter(Boolean).join(' · ');
 }
 
 for (const prefix of ['auth','account']) {
+  $('#' + prefix + 'MoreSubjects').addEventListener('click', () => {
+    expandedSubjectChoices[prefix] = !expandedSubjectChoices[prefix];
+    filterSubjectChoices(prefix);
+  });
+  $('#' + prefix + 'Subjects').addEventListener('change', () => filterSubjectChoices(prefix));
   $('#' + prefix + 'SubjectSearch').addEventListener('input', () => filterSubjectChoices(prefix));
   $('#' + prefix + 'Curriculum').addEventListener('change', () => {
     // Keep chosen courses while switching curriculum so a change does not erase choices.
     const selected = readAcademicForm(prefix).subjects;
+    expandedSubjectChoices[prefix] = false;
     $('#' + prefix + 'SubjectSearch').value = '';
     renderSubjectChoices(prefix, selected);
   });
