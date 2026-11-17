@@ -15,9 +15,15 @@ function updateQuestionSubjectFilter() {
   const curriculumId = $('#questionCurriculumFilter').value;
   const select = $('#questionSubjectFilter');
   const previous = select.value;
-  const options = questionFilterSubjects(curriculumId);
+  const query = $('#questionFilterSearch').value.trim().toLocaleLowerCase();
+  const options = questionFilterSubjects(curriculumId).filter(subject => subject.toLocaleLowerCase().includes(query));
+  $('#questionFilterSearch').disabled = !curriculumId;
+  $('#questionFilterSearchButton').disabled = !curriculumId;
+  $('#questionFilterSearchStatus').textContent = query
+    ? (options.length ? options.length + (options.length === 1 ? ' matching subject' : ' matching subjects') : 'No subjects match. Try another name or code.')
+    : '';
   select.disabled = !curriculumId;
-  select.innerHTML = '<option value="">' + (curriculumId ? 'Choose a subject' : 'Choose a curriculum first') + '</option>' +
+  select.innerHTML = '<option value="">' + (curriculumId ? (options.length ? 'Choose a subject' : 'No matching subjects') : 'Choose a curriculum first') + '</option>' +
     options.map(subject => `<option value="${safe(subject)}">${safe(subject)}</option>`).join('');
   select.value = options.includes(previous) ? previous : '';
 }
@@ -151,10 +157,29 @@ $('#refreshQuestions').onclick = () => loadQuestionBoard();
 $('#olderQuestions').onclick = () => loadQuestionBoard(true);
 $('#questionCurriculumFilter').onchange = () => {
   $('#questionSubjectFilter').value = '';
+  $('#questionFilterSearch').value = '';
   updateQuestionSubjectFilter();
   loadQuestionBoard();
 };
 $('#questionSubjectFilter').onchange = () => loadQuestionBoard();
+
+function searchQuestionSubjects() {
+  const previous = $('#questionSubjectFilter').value;
+  updateQuestionSubjectFilter();
+  if (previous !== $('#questionSubjectFilter').value) loadQuestionBoard();
+}
+$('#questionFilterSearch').addEventListener('input', searchQuestionSubjects);
+$('#questionFilterSearch').addEventListener('keydown', event => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    searchQuestionSubjects();
+    $('#questionSubjectFilter').focus();
+  }
+});
+$('#questionFilterSearchButton').onclick = () => {
+  searchQuestionSubjects();
+  $('#questionSubjectFilter').focus();
+};
 
 document.addEventListener('toggle', event => {
   if (event.target.matches('details[data-question-id]') && event.target.open) loadAnswers(event.target);
@@ -185,6 +210,7 @@ $('#questionForm').addEventListener('submit', async event => {
     const curriculumId = curricula.find(curriculum =>
       questionFilterSubjects(curriculum.id).includes(postedSubject))?.id ?? '';
     $('#questionCurriculumFilter').value = curriculumId;
+    $('#questionFilterSearch').value = '';
     updateQuestionSubjectFilter();
     $('#questionSubjectFilter').value = postedSubject;
     status.textContent = 'Question posted.';
