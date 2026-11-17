@@ -1,21 +1,40 @@
 let nextQuestion = null;
 let loadingQuestions = false;
 let pendingRecognition = null;
+let questionRequestVersion = 0;
 const questionDate = value => new Date(value * 1000).toLocaleDateString();
+
+function questionFilterSubjects(curriculumId) {
+  const curriculum = curricula.find(item => item.id === curriculumId);
+  if (!curriculum) return [];
+  const personal = me?.academics?.curriculum === curriculumId ? me.academics.subjects : [];
+  return [...new Set([...personal, ...curriculum.subjects])];
+}
+
+function updateQuestionSubjectFilter() {
+  const curriculumId = $('#questionCurriculumFilter').value;
+  const select = $('#questionSubjectFilter');
+  const previous = select.value;
+  const options = questionFilterSubjects(curriculumId);
+  select.disabled = !curriculumId;
+  select.innerHTML = '<option value="">' + (curriculumId ? 'Choose a subject' : 'Choose a curriculum first') + '</option>' +
+    options.map(subject => `<option value="${safe(subject)}">${safe(subject)}</option>`).join('');
+  select.value = options.includes(previous) ? previous : '';
+}
 
 function updateQuestionSubjects() {
   const ownSubjects = [...new Set([...(me?.academics?.subjects ?? []), ...subjects])];
-  const filterSubjects = [...new Set([...ownSubjects, ...curricula.flatMap(curriculum => curriculum.subjects)])];
-  for (const [selector, options, placeholder] of [
-    ['#questionSubject', ownSubjects, null],
-    ['#questionSubjectFilter', filterSubjects, 'All subjects'],
-  ]) {
-    const select = $(selector);
-    const previous = select.value;
-    select.innerHTML = (placeholder ? '<option value="">' + placeholder + '</option>' : '') +
-      options.map(subject => `<option value="${safe(subject)}">${safe(subject)}</option>`).join('');
-    if (options.includes(previous)) select.value = previous;
-  }
+  const composer = $('#questionSubject');
+  const previousSubject = composer.value;
+  composer.innerHTML = ownSubjects.map(subject => `<option value="${safe(subject)}">${safe(subject)}</option>`).join('');
+  if (ownSubjects.includes(previousSubject)) composer.value = previousSubject;
+
+  const select = $('#questionCurriculumFilter');
+  const previousCurriculum = select.value;
+  select.innerHTML = '<option value="">Choose a curriculum</option>' + curricula.map(curriculum =>
+    `<option value="${safe(curriculum.id)}">${safe(curriculum.name)}</option>`).join('');
+  if (curricula.some(curriculum => curriculum.id === previousCurriculum)) select.value = previousCurriculum;
+  updateQuestionSubjectFilter();
 }
 
 function favoriteButton(kind, id, questionId, saved) {
@@ -49,15 +68,28 @@ function questionCard(question, context = 'feed') {
 async function loadQuestionBoard(older = false) {
   $('#questionAccess').classList.toggle('hidden', Boolean(me));
   $('#questionBoard').classList.toggle('hidden', !me);
-  if (!me || loadingQuestions || (older && !nextQuestion)) return;
+  if (!me || (older && (loadingQuestions || !nextQuestion))) return;
+  const requestVersion = ++questionRequestVersion;
+  const curriculumId = $('#questionCurriculumFilter').value;
+  const subject = $('#questionSubjectFilter').value;
+  if (!curriculumId || !subject) {
+    loadingQuestions = false;
+    nextQuestion = null;
+    $('#questionFeed').innerHTML = '<div class="empty">' +
+      (curriculumId ? 'Choose a subject to see questions.' : 'Choose a curriculum, then a subject to see questions.') + '</div>';
+    $('#olderQuestions').classList.add('hidden');
+    $('#feedStatus').textContent = '';
+    return;
+  }
   loadingQuestions = true;
   const status = $('#feedStatus');
   status.textContent = 'Loading questions…';
   try {
     const params = new URLSearchParams();
     if (older) params.set('before', nextQuestion);
-    if ($('#questionSubjectFilter').value) params.set('subject', $('#questionSubjectFilter').value);
+    params.set('subject', subject);
     const page = await api('/questions?' + params);
+    if (requestVersion !== questionRequestVersion) return;
     const feed = $('#questionFeed');
     const markup = page.questions.map(question => questionCard(question)).join('');
     if (older) feed.insertAdjacentHTML('beforeend', markup);
@@ -66,9 +98,9 @@ async function loadQuestionBoard(older = false) {
     $('#olderQuestions').classList.toggle('hidden', !nextQuestion);
     status.textContent = '';
   } catch (error) {
-    status.textContent = error.message;
+    if (requestVersion === questionRequestVersion) status.textContent = error.message;
   } finally {
-    loadingQuestions = false;
+    if (requestVersion === questionRequestVersion) loadingQuestions = false;
   }
 }
 
@@ -117,6 +149,11 @@ async function loadSaved() {
 
 $('#refreshQuestions').onclick = () => loadQuestionBoard();
 $('#olderQuestions').onclick = () => loadQuestionBoard(true);
+$('#questionCurriculumFilter').onchange = () => {
+  $('#questionSubjectFilter').value = '';
+  updateQuestionSubjectFilter();
+  loadQuestionBoard();
+};
 $('#questionSubjectFilter').onchange = () => loadQuestionBoard();
 
 document.addEventListener('toggle', event => {
@@ -143,8 +180,13 @@ $('#questionForm').addEventListener('submit', async event => {
   status.textContent = 'Posting question…';
   try {
     await api('/questions', {method: 'POST', headers: {}, body: data});
+    const postedSubject = data.get('subject');
     form.reset();
-    $('#questionSubjectFilter').value = '';
+    const curriculumId = curricula.find(curriculum =>
+      questionFilterSubjects(curriculum.id).includes(postedSubject))?.id ?? '';
+    $('#questionCurriculumFilter').value = curriculumId;
+    updateQuestionSubjectFilter();
+    $('#questionSubjectFilter').value = postedSubject;
     status.textContent = 'Question posted.';
     await loadQuestionBoard();
   } catch (error) {
@@ -216,6 +258,8 @@ document.addEventListener('click', async event => {
     button.disabled = true;
     try {
       const {question} = await api('/questions/' + button.dataset.openQuestion);
+      questionRequestVersion++;
+      loadingQuestions = false;
       view('questions');
       $('#questionAccess').classList.add('hidden');
       $('#questionBoard').classList.remove('hidden');
