@@ -60,3 +60,13 @@ body[data-theme=sunrise] .hero h1 em { color:#9e6040; }
 .custom-subject { margin:10px 0 22px; }
 .custom-subject button { margin-top:8px; }
 #authDialog { max-height:90vh; overflow:auto; }
+
+.subject-choice { flex:1 1 240px; justify-content:flex-start; }
+.subject-choice.hidden { display:none!important; }
+.course-name { flex:1; overflow-wrap:anywhere; }
+.course-name small { display:block; font-size:10px; font-weight:400; color:#526657; margin:4px 0 0; }
+.course-code { flex:none; font:700 12px monospace; color:#315740; background:#edf4e8; padding:5px 7px; border-radius:6px; }
+.subject-sources { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 12px; }
+.subject-sources a { font-size:11px; color:#3f704b; }
+.subject-fieldset > input[type=search] { width:100%; border:1px solid #ccd9cd; padding:10px; border-radius:8px; font:inherit; font-size:13px; }
+.subject-fieldset > label { display:block; font-size:12px; margin:0 0 5px; }
