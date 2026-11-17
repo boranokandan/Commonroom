@@ -80,3 +80,11 @@ body[data-theme=sunrise] .hero h1 em { color:#9e6040; }
 #questionSubjectFilter { width:100%; padding:10px; background:white; border:1px solid var(--line); border-radius:8px; margin:7px 0 16px; font-size:12px; }
 #savedView > h2 { font-size:20px; margin-top:28px; }
 .question-composer select { width:100%; border:1px solid #ccd9cd; border-radius:8px; background:white; padding:10px; font:inherit; font-size:12px; }
+
+.question-filters { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px; }
+.question-filters > div { min-width:0; }
+.question-filters label { display:block; font-size:12px; font-weight:700; margin-bottom:7px; }
+.question-filters select { width:100%; min-width:0; padding:10px; background:white; border:1px solid var(--line); border-radius:8px; font:inherit; font-size:12px; }
+.question-filters #questionSubjectFilter { margin:0; }
+.question-filters select:disabled { color:#7d8c80; background:#f3f5f0; }
+@media(max-width:650px) { .question-filters { grid-template-columns:1fr; } }
