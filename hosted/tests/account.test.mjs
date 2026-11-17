@@ -36,13 +36,13 @@ function setup() {
     },
   };
   async function request(path, {user = 'alice', data, status = 200, origin = 'https://commonroom.test'} = {}) {
-    const headers = new Headers({'content-type': 'application/json'});
+    const headers = new Headers(data instanceof FormData ? {} : {'content-type': 'application/json'});
     if (origin) headers.set('origin', origin);
     if (user) headers.set('oai-authenticated-user-id', user);
     const response = await worker.fetch(new Request('https://commonroom.test/api' + path, {
       method: data === undefined ? 'GET' : 'POST',
       headers,
-      body: data === undefined ? undefined : JSON.stringify(data),
+      body: data instanceof FormData ? data : data === undefined ? undefined : JSON.stringify(data),
     }), {DB});
     const result = await response.json();
     assert.equal(response.status, status, JSON.stringify(result));
@@ -140,5 +140,77 @@ test('coded subjects keep qualification, level, and leading zeros through accoun
     assert.notEqual(ibMath[0].value, ibMath[1].value);
     await request('/account', {data: {curriculum: 'ib-dp', subjects: [ibMath[1].value, 'Biology', 'My school course']}});
     assert.deepEqual((await request('/me')).user.academics.subjects, [ibMath[1].value, 'Biology', 'My school course']);
+  } finally {database.close();}
+});
+
+test('subject tags and private favorites persist with idempotent save and removal', async () => {
+  const {database, request} = setup();
+  try {
+    await request('/profile', {data: account});
+    await request('/profile', {user: 'bob', data: {...account, name: 'Bob'}});
+    const form = new FormData();
+    form.set('question', 'How do cells divide?');
+    form.set('subject', 'Biology');
+    const {id} = await request('/questions', {data: form, status: 201});
+    await request('/questions/' + id + '/answers', {user: 'bob', data: {answer: 'During mitosis.'}, status: 201});
+    const {answers} = await request('/questions/' + id + '/answers');
+    const answer = answers[0];
+    const favoriteQuestion = '/questions/' + id + '/favorite';
+    const favoriteAnswer = '/questions/' + id + '/answers/' + answer.id + '/favorite';
+    await request(favoriteQuestion, {data: {saved: true}});
+    await request(favoriteQuestion, {data: {saved: true}});
+    await request(favoriteAnswer, {data: {saved: true}});
+    await request(favoriteAnswer, {data: {saved: true}});
+    const saved = await request('/saved');
+    assert.equal(saved.questions.length, 1);
+    assert.equal(saved.explanations.length, 1);
+    assert.equal(saved.explanations[0].content, 'During mitosis.');
+    assert.equal((await request('/saved', {user: 'bob'})).questions.length, 0);
+    assert.equal((await request('/saved', {user: 'bob'})).explanations.length, 0);
+    await request(favoriteQuestion, {user: 'bob', data: {saved: false, user_id: 'alice'}});
+    assert.equal((await request('/saved')).questions.length, 1);
+    assert.equal((await request('/questions?subject=Biology')).questions.length, 1);
+    assert.equal((await request('/questions?subject=Physics')).questions.length, 0);
+    assert.equal((await request('/questions/' + id)).question.subject, 'Biology');
+    await request(favoriteQuestion, {data: {saved: false}});
+    await request(favoriteAnswer, {data: {saved: false}});
+    assert.deepEqual(await request('/saved'), {questions: [], explanations: []});
+    await request('/saved', {user: null, status: 401});
+    await request(favoriteAnswer, {data: {saved: true}, origin: 'https://other.test', status: 403});
+  } finally {database.close();}
+});
+
+test('question recognition awards once to another helper and appears only in their private history', async () => {
+  const {database, request} = setup();
+  try {
+    await request('/profile', {data: account});
+    for (const user of ['bob', 'outsider']) {
+      await request('/profile', {user, data: {...account, name: user}});
+    }
+    const form = new FormData();
+    form.set('question', 'What is a cell?');
+    const {id} = await request('/questions', {data: form, status: 201});
+    await request('/questions/' + id + '/answers', {user: 'bob', data: {answer: 'The basic unit of life.'}, status: 201});
+    await request('/questions/' + id + '/answers', {data: {answer: 'My own explanation'}, status: 201});
+    const {answers} = await request('/questions/' + id + '/answers');
+    const path = '/questions/' + id + '/answers/' + answers[0].id + '/thank';
+    const ownPath = '/questions/' + id + '/answers/' + answers[1].id + '/thank';
+    await request(path, {user: 'outsider', data: {note: 'test'}, status: 403});
+    await request(ownPath, {data: {note: 'test'}, status: 400});
+    await request(path, {data: {note: 'x'.repeat(241)}, status: 400});
+    await request(path, {data: {note: 'Your example made it clear.'}});
+    await request(path, {data: {note: 'Retry'}, status: 409});
+    assert.equal((await request('/questions/' + id + '/answers')).can_thank, false);
+    const helper = (await request('/me', {user: 'bob'})).user;
+    assert.equal(helper.balance, 3);
+    assert.equal(helper.rewards.stats.thanks, 1);
+    assert.equal(helper.rewards.rewards.find(reward => reward.id === 'helping-hand').unlocked, true);
+    const helperHistory = (await request('/ledger', {user: 'bob'})).events;
+    assert.equal(helperHistory.length, 1);
+    assert.equal(helperHistory[0].note, 'Your example made it clear.');
+    assert.equal(helperHistory[0].topic, 'What is a cell?');
+    assert.equal(helperHistory[0].actor_name, 'Alice');
+    assert.deepEqual((await request('/ledger', {user: 'outsider'})).events, []);
+    assert.equal((await request('/me')).user.balance, 0);
   } finally {database.close();}
 });

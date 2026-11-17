@@ -16,7 +16,7 @@ export async function rewardState(db, userId) {
     COALESCE(SUM(amount), 0) AS tokens,
     COALESCE(SUM(CASE WHEN kind='participated' THEN 1 ELSE 0 END), 0) AS sessions,
     COALESCE(SUM(CASE WHEN kind='helped' OR kind LIKE 'helped:%' THEN 1 ELSE 0 END), 0) AS thanks
-    FROM token_events WHERE user_id=?`).bind(userId).first();
+    FROM token_activity WHERE user_id=?`).bind(userId).first();
   const selected = await db.prepare('SELECT theme,title FROM reward_preferences WHERE user_id=?').bind(userId).first();
   return {
     stats,
