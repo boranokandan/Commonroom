@@ -35,7 +35,13 @@ function setup() {
       }
     },
   };
-  async function request(path, {user = 'alice', data, status = 200, origin = 'https://commonroom.test'} = {}) {
+  const uploads = new Map();
+  const BUCKET = {
+    async put(key, value) { uploads.set(key, value); },
+    async get(key) { return uploads.has(key) ? {body: uploads.get(key)} : null; },
+    async delete(key) { uploads.delete(key); },
+  };
+  async function request(path, {user = 'alice', data, status = 200, origin = 'https://commonroom.test', raw = false} = {}) {
     const headers = new Headers(data instanceof FormData ? {} : {'content-type': 'application/json'});
     if (origin) headers.set('origin', origin);
     if (user) headers.set('oai-authenticated-user-id', user);
@@ -43,12 +49,12 @@ function setup() {
       method: data === undefined ? 'GET' : 'POST',
       headers,
       body: data instanceof FormData ? data : data === undefined ? undefined : JSON.stringify(data),
-    }), {DB});
-    const result = await response.json();
-    assert.equal(response.status, status, JSON.stringify(result));
+    }), {DB, BUCKET});
+    const result = raw ? response : await response.json();
+    assert.equal(response.status, status, raw ? '' : JSON.stringify(result));
     return result;
   }
-  return {database, request};
+  return {database, request, uploads};
 }
 const account = {name: 'Alice', curriculum: 'ib-dp', subjects: ['Mathematics', 'Biology']};
 
@@ -212,5 +218,107 @@ test('question recognition awards once to another helper and appears only in the
     assert.equal(helperHistory[0].actor_name, 'Alice');
     assert.deepEqual((await request('/ledger', {user: 'outsider'})).events, []);
     assert.equal((await request('/me')).user.balance, 0);
+  } finally {database.close();}
+});
+
+test('answer photos allow photo-only and mixed answers, enforce file rules, and remain authenticated', async () => {
+  const {database, request, uploads} = setup();
+  try {
+    await request('/profile', {data: account});
+    await request('/profile', {user: 'bob', data: {...account, name: 'Bob'}});
+    const question = new FormData();
+    question.set('question','Explain this diagram.');
+    const {id} = await request('/questions',{data:question,status:201});
+    const path='/questions/'+id+'/answers';
+    const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aHTsAAAAASUVORK5CYII=','base64');
+    const photo = new FormData();
+    photo.set('photo', new Blob([png],{type:'image/png'}), 'diagram.png');
+    await request(path,{user:'bob',data:photo,status:201});
+    const mixed = new FormData();
+    mixed.set('answer','Here is a worked example.');
+    mixed.set('photo', new Blob([png],{type:'image/png'}), 'worked.png');
+    await request(path,{user:'bob',data:mixed,status:201});
+    const {answers}=await request(path);
+    assert.equal(answers.length,2);
+    assert.equal(answers[0].has_photo,1);
+    const imagePath=path+'/'+answers[0].id+'/photo';
+    const image=await request(imagePath,{raw:true});
+    assert.equal(image.headers.get('content-type'),'image/png');
+    assert.deepEqual(Buffer.from(await image.arrayBuffer()),png);
+    await request(imagePath,{user:null,status:401});
+    await request(path,{data:new FormData(),status:400});
+    const invalid = new FormData();
+    invalid.set('photo',new Blob(['<script>bad</script>'],{type:'image/png'}),'fake.png');
+    await request(path,{data:invalid,status:400});
+    const oversized = new FormData();
+    oversized.set('photo',new Blob([new Uint8Array(5*1024*1024+1)],{type:'image/png'}),'large.png');
+    await request(path,{data:oversized,status:413});
+    assert.equal(uploads.size,2);
+    await request(path+'/'+answers[0].id+'/favorite',{data:{saved:true}});
+    assert.equal((await request('/saved')).explanations[0].has_photo,1);
+    assert.equal((await request('/me')).user.balance,0);
+  } finally {database.close();}
+});
+
+test('answer votes are unique, switchable, removable, and ordered by thumbs-up first', async () => {
+  const {database, request} = setup();
+  try {
+    for (const user of ['alice','bob','carol','v1','v2','v3','v4']) {
+      await request('/profile',{user,data:{...account,name:user}});
+    }
+    const question=new FormData();question.set('question','Which explanation is clearer?');
+    const {id}=await request('/questions',{data:question,status:201});
+    const path='/questions/'+id+'/answers';
+    await request(path,{user:'bob',data:{answer:'First explanation'},status:201});
+    await request(path,{user:'carol',data:{answer:'Second explanation'},status:201});
+    const initial=(await request(path)).answers;
+    const first=path+'/'+initial[0].id+'/vote',second=path+'/'+initial[1].id+'/vote';
+    await request(first,{user:'bob',data:{vote:1},status:400});
+    await request(first,{user:'v1',data:{vote:1}});
+    await request(first,{user:'v1',data:{vote:1}});
+    assert.equal((await request(path)).answers[0].up_votes,1);
+    await request(first,{user:'v1',data:{vote:-1}});
+    let answer=(await request(path,{user:'v1'})).answers.find(a=>a.id===initial[0].id);
+    assert.equal(answer.my_vote,-1);
+    assert.equal(answer.up_votes,0);
+    assert.equal(answer.down_votes,1);
+    await request(first,{user:'v1',data:{vote:0}});
+    await request(first,{data:{vote:1}});
+    for (const user of ['alice','v1']) await request(second,{user,data:{vote:1}});
+    for (const user of ['v2','v3','v4']) await request(second,{user,data:{vote:-1}});
+    const sorted=(await request(path)).answers;
+    assert.equal(sorted[0].id,initial[1].id);
+    assert.equal(sorted[0].up_votes,2);
+    assert.equal(sorted[0].down_votes,3);
+    assert.equal(database.prepare('SELECT COUNT(*) n FROM answer_votes WHERE answer_id=? AND user_id=?').get(initial[1].id,'v1').n,1);
+    await request(first,{data:{vote:2},status:400});
+    await request(first,{user:null,data:{vote:1},status:401});
+    await request(first,{origin:'https://other.test',data:{vote:1},status:403});
+    assert.equal((await request('/me',{user:'carol'})).user.balance,0);
+  } finally {database.close();}
+});
+
+test('answer reports are private, persistent, validated, and deduplicated', async () => {
+  const {database, request} = setup();
+  try {
+    for (const user of ['alice','bob','carol']) await request('/profile',{user,data:{...account,name:user}});
+    const question=new FormData();question.set('question','An example question.');
+    const {id}=await request('/questions',{data:question,status:201});
+    const path='/questions/'+id+'/answers';
+    await request(path,{user:'bob',data:{answer:'An explanation'},status:201});
+    const answer=(await request(path)).answers[0];
+    const report=path+'/'+answer.id+'/report';
+    await request(report,{data:{reason:'unknown'},status:400});
+    await request(report,{data:{reason:'spam',details:'x'.repeat(501)},status:400});
+    await request(report,{data:{reason:'inappropriate',details:'Please review this content.'}});
+    await request(report,{data:{reason:'spam'}});
+    assert.equal(database.prepare('SELECT COUNT(*) n FROM answer_reports').get().n,1);
+    const mine=(await request(path)).answers[0];
+    assert.equal(mine.reported,1);
+    assert.equal(mine.details,undefined);
+    assert.equal(mine.reporter_id,undefined);
+    assert.equal((await request(path,{user:'carol'})).answers[0].reported,0);
+    await request(report,{user:null,data:{reason:'spam'},status:401});
+    await request('/questions/999/answers/'+answer.id+'/report',{data:{reason:'spam'},status:404});
   } finally {database.close();}
 });

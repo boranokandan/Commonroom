@@ -174,7 +174,7 @@ async function questions(request, {DB: db, BUCKET: bucket}, url, profile) {
       (SELECT COUNT(*) FROM answers a WHERE a.question_id=q.id) answer_count
       FROM question_favorites f JOIN questions q ON q.id=f.question_id
       JOIN users u ON u.id=q.author_id WHERE f.user_id=? ORDER BY f.created_at DESC`, profile.id);
-    const explanations = await all(db, `SELECT a.id,a.question_id,a.content,a.created_at,u.name author,
+    const explanations = await all(db, `SELECT a.id,a.question_id,a.content,a.created_at,a.photo_key IS NOT NULL has_photo,u.name author,
       q.content question_content,q.subject
       FROM answer_favorites f JOIN answers a ON a.id=f.answer_id
       JOIN questions q ON q.id=a.question_id JOIN users u ON u.id=a.author_id
@@ -234,7 +234,7 @@ async function questions(request, {DB: db, BUCKET: bucket}, url, profile) {
     return json({question:row});
   }
 
-  const route = path.match(/^\/api\/questions\/(\d+)\/(answers|photo|favorite)(?:\/(\d+)\/(favorite|thank))?$/);
+  const route = path.match(/^\/api\/questions\/(\d+)\/(answers|photo|favorite)(?:\/(\d+)\/(favorite|thank|vote|report|photo))?$/);
   if (!route) return fail(404, 'Not found.');
   const id = Number(route[1]);
   if (!Number.isSafeInteger(id)) return fail(404, 'Question not found.');
@@ -260,16 +260,43 @@ async function questions(request, {DB: db, BUCKET: bucket}, url, profile) {
   if (route[2] !== 'answers') return fail(405,'Method not allowed.');
   if (route[3]) {
     const answerId = Number(route[3]);
-    const answer = await one(db,'SELECT author_id FROM answers WHERE id=? AND question_id=?',answerId,id);
+    const answer = await one(db,'SELECT author_id,photo_key,photo_type FROM answers WHERE id=? AND question_id=?',answerId,id);
     if (!answer) return fail(404,'Answer not found.');
+    if (route[4] === 'photo' && method === 'GET') {
+      const photo = answer.photo_key && bucket && await bucket.get(answer.photo_key);
+      if (!photo) return fail(404,'Photo not found.');
+      return new Response(photo.body,{headers:{
+        'content-type':answer.photo_type,
+        'cache-control':'private, no-store',
+        'x-content-type-options':'nosniff',
+      }});
+    }
     if (method !== 'POST') return fail(405,'Method not allowed.');
     const data = await body(request);
+    if (route[4] === 'vote') {
+      if (answer.author_id === profile.id) throw [400,'You cannot vote on your own answer.'];
+      if (!Number.isInteger(data.vote) || ![-1,0,1].includes(data.vote)) throw [400,'Choose thumbs up or thumbs down.'];
+      if (data.vote === 0) await run(db,'DELETE FROM answer_votes WHERE answer_id=? AND user_id=?',answerId,profile.id);
+      else await run(db,`INSERT INTO answer_votes(answer_id,user_id,vote,updated_at) VALUES(?,?,?,?)
+        ON CONFLICT(answer_id,user_id) DO UPDATE SET vote=excluded.vote,updated_at=excluded.updated_at`,
+        answerId,profile.id,data.vote,now());
+      return json({ok:true});
+    }
+    if (route[4] === 'report') {
+      if (!['inappropriate','harassment','spam','other'].includes(data.reason)) throw [400,'Choose a report reason.'];
+      const details = checkedText(data.details ?? '',500,'Report details');
+      await run(db,`INSERT OR IGNORE INTO answer_reports(answer_id,reporter_id,reason,details,created_at)
+        VALUES(?,?,?,?,?)`,answerId,profile.id,data.reason,details,now());
+      return json({ok:true});
+    }
+
     if (route[4] === 'favorite') {
       if (typeof data.saved !== 'boolean') throw [400,'Choose whether to save the explanation.'];
       if (data.saved) await run(db,'INSERT OR IGNORE INTO answer_favorites(user_id,answer_id,created_at) VALUES(?,?,?)',profile.id,answerId,now());
       else await run(db,'DELETE FROM answer_favorites WHERE user_id=? AND answer_id=?',profile.id,answerId);
       return json({saved:data.saved});
     }
+    if (route[4] !== 'thank') return fail(405,'Method not allowed.');
     if (question.author_id !== profile.id) throw [403,'Only the student who asked can thank an explanation.'];
     if (answer.author_id === profile.id) throw [400,'You cannot award yourself Help Tokens.'];
     const note = checkedText(data.note ?? '',240,'Note');
@@ -282,15 +309,47 @@ async function questions(request, {DB: db, BUCKET: bucket}, url, profile) {
     return json({
       can_thank: question.author_id === profile.id && !recognized,
       answers: await all(db,`SELECT a.id,a.content,a.created_at,u.name author,a.author_id=? mine,
-        EXISTS(SELECT 1 FROM answer_favorites f WHERE f.user_id=? AND f.answer_id=a.id) saved
-        FROM answers a JOIN users u ON u.id=a.author_id WHERE a.question_id=? ORDER BY a.id`,profile.id,profile.id,id),
+        a.photo_key IS NOT NULL has_photo,
+        EXISTS(SELECT 1 FROM answer_favorites f WHERE f.user_id=? AND f.answer_id=a.id) saved,
+        COALESCE((SELECT vote FROM answer_votes v WHERE v.answer_id=a.id AND v.user_id=?),0) my_vote,
+        (SELECT COUNT(*) FROM answer_votes v WHERE v.answer_id=a.id AND v.vote=1) up_votes,
+        (SELECT COUNT(*) FROM answer_votes v WHERE v.answer_id=a.id AND v.vote=-1) down_votes,
+        EXISTS(SELECT 1 FROM answer_reports r WHERE r.answer_id=a.id AND r.reporter_id=?) reported
+        FROM answers a JOIN users u ON u.id=a.author_id WHERE a.question_id=?
+        ORDER BY up_votes DESC,down_votes ASC,a.created_at ASC,a.id ASC`,
+        profile.id,profile.id,profile.id,profile.id,id),
     });
   }
   if (method === 'POST') {
-    const data = await body(request);
-    const content = checkedText(data.answer ?? '',2000,'Answer');
-    if (!content) throw [400,'Write an answer first.'];
-    await run(db,'INSERT INTO answers(question_id,author_id,content,created_at) VALUES(?,?,?,?)',id,profile.id,content,now());
+    let content;
+    let attachment = null;
+    if (request.headers.get('content-type')?.startsWith('multipart/form-data;')) {
+      const form = await readQuestionForm(request);
+      content = checkedText(form.get('answer') ?? '',2000,'Answer');
+      attachment = form.get('photo');
+      if (attachment !== null && !(attachment instanceof File)) throw [400,'Choose a photo file.'];
+    } else {
+      const data = await body(request);
+      content = checkedText(data.answer ?? '',2000,'Answer');
+    }
+    const hasPhoto = Boolean(attachment?.size);
+    if (!content && !hasPhoto) throw [400,'Write an answer or attach a photo.'];
+    if (hasPhoto && attachment.size > PHOTO_LIMIT) throw [413,'Choose a photo smaller than 5 MB.'];
+    let key = null;
+    let type = null;
+    if (hasPhoto) {
+      if (!bucket) throw [503,'Photo uploads are temporarily unavailable.'];
+      type = photoType(new Uint8Array(await attachment.slice(0,12).arrayBuffer()));
+      key = 'answers/' + crypto.randomUUID();
+      await bucket.put(key,await attachment.arrayBuffer(),{httpMetadata:{contentType:type}});
+    }
+    try {
+      await run(db,`INSERT INTO answers(question_id,author_id,content,photo_key,photo_type,created_at)
+        VALUES(?,?,?,?,?,?)`,id,profile.id,content || 'Photo explanation',key,type,now());
+    } catch (error) {
+      if (key) await bucket.delete(key).catch(() => {});
+      throw error;
+    }
     return json({ok:true},201);
   }
   return fail(405, 'Method not allowed.');
