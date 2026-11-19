@@ -94,3 +94,11 @@ body[data-theme=sunrise] .hero h1 em { color:#9e6040; }
 .subject-search-row input:disabled { background:#f3f5f0; }
 .subject-search-row button { flex:none; }
 .subject-search-row button:disabled { opacity:.55; cursor:default; }
+
+.answer-feedback { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+.answer-feedback button { font-size:14px; min-height:40px; }
+.answer-feedback [aria-pressed=true] { background:#e5efdf; border-color:#62935e; }
+.answer-feedback button:disabled { opacity:.6; cursor:default; }
+.answer-feedback .report-answer { margin-left:auto; }
+.answer-form input[type=file] { display:block; max-width:100%; font:inherit; font-size:14px; }
+.answer-photo-hint { display:block; margin:7px 0; color:#586b5c; font-size:12px; }

@@ -58,4 +58,12 @@
   <h2>Thank a helpful explanation</h2><p>You can thank one explanation per question. Your classmate receives 3 Help Tokens.</p>
   <label for="recognitionNote">A private note (optional)</label><textarea id="recognitionNote" maxlength="240" rows="3" placeholder="What helped it click?"></textarea>
   <p id="recognitionError" class="form-error" role="alert"></p><button class="primary wide" type="submit">Send thanks</button>
+</form></dialog><dialog id="answerReportDialog"><form id="answerReportForm">
+  <button type="button" class="close" data-close aria-label="Close">×</button>
+  <h2>Report an answer</h2>
+  <label for="answerReportReason">Reason</label>
+  <select id="answerReportReason" required><option value="">Choose a reason</option><option value="inappropriate">Inappropriate content</option><option value="harassment">Harassment or bullying</option><option value="spam">Spam</option><option value="other">Other</option></select>
+  <label for="answerReportDetails">Details (optional)</label><textarea id="answerReportDetails" rows="3" maxlength="500"></textarea>
+  <p id="answerReportError" class="form-error" role="alert"></p>
+  <button class="primary wide" type="submit">Submit report</button>
 </form></dialog><script src="/app.js"></script><script src="/questions.js"></script><script src="/rewards.js"></script><script src="/account.js"></script></body></html>

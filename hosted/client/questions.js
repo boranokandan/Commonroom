@@ -1,6 +1,7 @@
 let nextQuestion = null;
 let loadingQuestions = false;
 let pendingRecognition = null;
+let pendingAnswerReport = null;
 let questionRequestVersion = 0;
 const questionDate = value => new Date(value * 1000).toLocaleDateString();
 
@@ -63,7 +64,10 @@ function questionCard(question, context = 'feed') {
       <div class="question-answers"></div>
       <form class="answer-form">
         <label for="answer-${context}-${id}">Your answer</label>
-        <textarea id="answer-${context}-${id}" name="answer" rows="3" required maxlength="2000" placeholder="Share a hint or explain a step…"></textarea>
+        <textarea id="answer-${context}-${id}" name="answer" rows="3" maxlength="2000" placeholder="Share a hint or explain a step…"></textarea>
+        <label for="answer-photo-${context}-${id}">Attach a photo (optional)</label>
+        <input id="answer-photo-${context}-${id}" name="photo" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="answer-photo-hint-${context}-${id}">
+        <small id="answer-photo-hint-${context}-${id}" class="answer-photo-hint">JPEG, PNG, or WebP, up to 5 MB.</small>
         <button class="outline" type="submit">Post answer</button>
         <p class="board-status" role="status"></p>
       </form>
@@ -110,13 +114,28 @@ async function loadQuestionBoard(older = false) {
   }
 }
 
+function answerPhoto(answer, questionId) {
+  if (!answer.has_photo) return '';
+  const url = '/api/questions/' + questionId + '/answers/' + answer.id + '/photo';
+  return `<a href="${url}" target="_blank" rel="noopener" aria-label="Open answer photo"><img class="question-photo" src="${url}" alt="Photo attached to this explanation" loading="lazy"></a>`;
+}
+
 async function loadAnswers(thread) {
   const list = thread.querySelector('.question-answers');
   try {
     const {answers, can_thank} = await api('/questions/' + thread.dataset.questionId + '/answers');
-    list.innerHTML = answers.map(answer => `<div class="question-answer">
+    list.innerHTML = (answers.length ? '<p class="board-status">Most thumbs-up first</p>' : '') + answers.map(answer => `<div class="question-answer">
       <small class="question-meta">${safe(answer.author)} · ${questionDate(answer.created_at)}</small>
       <p class="question-copy">${safe(answer.content)}</p>
+      ${answerPhoto(answer, thread.dataset.questionId)}
+      <div class="answer-feedback" role="group" aria-label="Answer feedback">
+        <button class="outline" type="button" data-answer-vote="1" data-answer-id="${answer.id}" data-question-id="${thread.dataset.questionId}"
+          data-current-vote="${answer.my_vote}" aria-pressed="${answer.my_vote === 1}" aria-label="Thumbs up, ${answer.up_votes} votes" ${answer.mine ? 'disabled title="You cannot vote on your own answer"' : ''}>👍 ${answer.up_votes}</button>
+        <button class="outline" type="button" data-answer-vote="-1" data-answer-id="${answer.id}" data-question-id="${thread.dataset.questionId}"
+          data-current-vote="${answer.my_vote}" aria-pressed="${answer.my_vote === -1}" aria-label="Thumbs down, ${answer.down_votes} votes" ${answer.mine ? 'disabled title="You cannot vote on your own answer"' : ''}>👎 ${answer.down_votes}</button>
+        <button class="outline report-answer" type="button" data-report-answer="${answer.id}" data-question-id="${thread.dataset.questionId}" ${answer.reported ? 'disabled' : ''}
+          aria-label="${answer.reported ? 'Answer reported' : 'Report answer'}">⚑ ${answer.reported ? 'Reported' : 'Report'}</button>
+      </div>
       <div class="answer-actions">${favoriteButton('answer', answer.id, thread.dataset.questionId, answer.saved)}
       ${can_thank && !answer.mine ? `<button class="outline" type="button" data-recognize="${answer.id}" data-question-id="${thread.dataset.questionId}">This helped me</button>` : ''}</div>
     </div>`).join('') || '<p class="board-status">No answers yet.</p>';
@@ -144,6 +163,7 @@ async function loadSaved() {
       <p class="question-subject">${safe(answer.subject)}</p>
       <p class="saved-context">Question · ${safe(answer.question_content || 'Photo question')}</p>
       <p class="question-copy">${safe(answer.content)}</p>
+      ${answerPhoto(answer, answer.question_id)}
       <div class="answer-actions">${favoriteButton('answer', answer.id, answer.question_id, true)}
       <button class="outline" type="button" data-open-question="${answer.question_id}">Open question</button></div>
     </article>`).join('') || '<div class="empty">Save an explanation to revisit it here.</div>';
@@ -227,18 +247,25 @@ document.addEventListener('submit', async event => {
   if (!form.matches('.answer-form')) return;
   event.preventDefault();
   const answer = form.elements.answer.value.trim();
+  const photo = form.elements.photo.files[0];
   const status = form.querySelector('[role="status"]');
-  if (!answer) {
-    status.textContent = 'Write an answer first.';
+  if (!answer && !photo) {
+    status.textContent = 'Write an answer or attach a photo.';
     return;
   }
+  if (photo?.size > 5 * 1024 * 1024) {
+    status.textContent = 'Choose a photo up to 5 MB.';
+    return;
+  }
+  const data = new FormData(form);
+  if (!photo) data.delete('photo');
   const button = form.querySelector('button');
   const thread = form.closest('details');
   button.disabled = true;
   status.textContent = 'Posting answer…';
   try {
     await api('/questions/' + thread.dataset.questionId + '/answers', {
-      method: 'POST', body: JSON.stringify({answer}),
+      method: 'POST', headers: {}, body: data,
     });
     form.reset();
     await loadAnswers(thread);
@@ -253,6 +280,30 @@ document.addEventListener('submit', async event => {
 document.addEventListener('click', async event => {
   const button = event.target.closest('button');
   if (!button) return;
+  if (button.hasAttribute('data-answer-vote')) {
+    const thread = button.closest('details');
+    const value = Number(button.dataset.answerVote);
+    const vote = Number(button.dataset.currentVote) === value ? 0 : value;
+    button.disabled = true;
+    try {
+      await api('/questions/' + button.dataset.questionId + '/answers/' + button.dataset.answerId + '/vote', {
+        method: 'POST', body: JSON.stringify({vote}),
+      });
+      await loadAnswers(thread);
+    } catch (error) {
+      showNotice(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+    return;
+  }
+  if (button.hasAttribute('data-report-answer')) {
+    pendingAnswerReport = {questionId: button.dataset.questionId, answerId: button.dataset.reportAnswer, thread: button.closest('details')};
+    $('#answerReportForm').reset();
+    $('#answerReportError').textContent = '';
+    $('#answerReportDialog').showModal();
+    return;
+  }
   if (button.hasAttribute('data-recognize')) {
     pendingRecognition = {answerId: button.dataset.recognize, questionId: button.dataset.questionId};
     $('#recognitionNote').value = '';
@@ -317,6 +368,28 @@ $('#recognitionForm').addEventListener('submit', async event => {
     showNotice('Thank-you sent. Your classmate received 3 Help Tokens and your private note.');
   } catch (error) {
     $('#recognitionError').textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('#answerReportForm').addEventListener('submit', async event => {
+  event.preventDefault();
+  if (!pendingAnswerReport) return;
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  button.disabled = true;
+  try {
+    const {questionId, answerId, thread} = pendingAnswerReport;
+    await api('/questions/' + questionId + '/answers/' + answerId + '/report', {
+      method: 'POST',
+      body: JSON.stringify({reason: $('#answerReportReason').value, details: $('#answerReportDetails').value}),
+    });
+    pendingAnswerReport = null;
+    $('#answerReportDialog').close();
+    if (thread.isConnected) await loadAnswers(thread);
+    showNotice('Your report has been saved for review.');
+  } catch (error) {
+    $('#answerReportError').textContent = error.message;
   } finally {
     button.disabled = false;
   }
